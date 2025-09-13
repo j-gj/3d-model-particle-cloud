@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Particle Wireframe 3D Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: #1a1a1a;
+            color: white;
+            overflow: hidden;
+        }
+
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 10px;
+            padding: 20px;
+            width: 300px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 1000;
+            max-height: 95vh;
+            overflow-y: auto;
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .control-group input[type="range"] {
+            width: 100%;
+            margin-bottom: 5px;
+        }
+
+        .control-group input[type="color"] {
+            width: 100%;
+            height: 40px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .control-group input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #444;
+            border-radius: 5px;
+            background: #2a2a2a;
+            color: white;
+        }
+
+        #upload-area {
+            border: 2px dashed #666;
+            border-radius: 10px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+        }
+
+        #upload-area:hover {
+            border-color: #888;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        #upload-area.dragover {
+            border-color: #00ff88;
+            background: rgba(0, 255, 136, 0.1);
+        }
+
+        #file-input {
+            display: none;
+        }
+
+        .button {
+            background: #333;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            transition: background 0.3s ease;
+        }
+
+        .button:hover {
+            background: #555;
+        }
+
+        .button:disabled {
+            background: #222;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 20px 40px;
+            border-radius: 10px;
+            display: none;
+            z-index: 2000;
+        }
+
+        .preset-colors {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .color-preset {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 2px solid #666;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .color-preset:hover {
+            transform: scale(1.1);
+            border-color: #fff;
+        }
+
+        #model-info {
+            font-size: 12px;
+            color: #aaa;
+            margin-top: 10px;
+        }
+
+        .info-text {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="canvas-container"></div>
+        
+        <div id="controls">
+            <h2>Particle Wireframe Viewer</h2>
+            
+            <div id="upload-area">
+                <p>📁 Drag & Drop 3D Model</p>
+                <p>or click to browse</p>
+                <p class="info-text">Supports: GLB, GLTF, OBJ, FBX</p>
+                <input type="file" id="file-input" accept=".glb,.gltf,.obj,.fbx" />
+            </div>
+
+            <div class="control-group">
+                <label>Particle Count: <span id="particle-count">5000</span> / <span id="particle-max-count">50000</span></label>
+                <input type="range" id="particle-density" min="1000" max="50000" value="5000" step="500">
+                <div class="info-text">Higher values may impact performance</div>
+            </div>
+
+            <div class="control-group">
+                <label>Particle Size: <span id="particle-size-value">0.1</span></label>
+                <input type="range" id="particle-size" min="0.1" max="20" value="0.1" step="0.1">
+            </div>
+
+            <div class="control-group">
+                <label>Particle Color</label>
+                <div class="preset-colors">
+                    <div class="color-preset" style="background: #372CD5" data-color="#372CD5"></div>
+                    <div class="color-preset" style="background: #637AFF" data-color="#637AFF"></div>
+                    <div class="color-preset" style="background: #050033" data-color="#050033"></div>
+                    <div class="color-preset" style="background: #F0F4FF" data-color="#F0F4FF"></div>
+                    <div class="color-preset" style="background: #9FADED" data-color="#9FADED"></div>
+                </div>
+                <input type="color" id="particle-color" value="#372CD5">
+            </div>
+
+            <div class="control-group">
+                <label>Background Color</label>
+                <div class="preset-colors">
+                    <div class="color-preset" style="background: #000000" data-color="#000000"></div>
+                    <div class="color-preset" style="background: #ffffff" data-color="#ffffff"></div>
+                    <div class="color-preset" style="background: #F0F4FF" data-color="#F0F4FF"></div>
+                    <div class="color-preset" style="background: #637AFF" data-color="#637AFF"></div>
+                    <div class="color-preset" style="background: #9FADED" data-color="#9FADED"></div>
+                </div>
+                <input type="color" id="background-color" value="#ffffff">
+            </div>
+
+            <!-- New Camera Controls -->
+            <div class="control-group">
+                <h3>Camera Controls</h3>
+                
+                <label>Zoom In Limit (minDistance): <span id="min-distance-value">0.1</span></label>
+                <input type="range" id="min-distance-slider" min="0.01" max="10" value="0.1" step="0.01">
+
+                <label>Zoom Out Limit (maxDistance): <span id="max-distance-value">5000</span></label>
+                <input type="range" id="max-distance-slider" min="10" max="5000" value="5000" step="10">
+
+                <label>Field of View (FOV): <span id="fov-value">75</span></label>
+                <input type="range" id="fov-slider" min="10" max="120" value="75" step="1">
+
+                <label>Near Clip Plane: <span id="near-value">0.1</span></label>
+                <input type="range" id="near-slider" min="0.01" max="100" value="0.1" step="0.01">
+
+                <label>Far Clip Plane: <span id="far-value">8000</span></label>
+                <input type="range" id="far-slider" min="10" max="10000" value="8000" step="10">
+            </div>
+            <!-- End of New Camera Controls -->
+
+            <div class="control-group">
+                <button class="button" id="reset-camera">Reset Camera</button>
+                <button class="button" id="export-screenshot">Export Screenshot</button>
+            </div>
+
+            <div id="model-info"></div>
+        </div>
+
+        <div id="loading">
+            <p>Processing 3D model...</p>
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+        import { FBXLoader } from 'three/addons/loaders/FBXLoader.js';
+
+        class ParticleWireframeViewer {
+            constructor() {
+                this.scene = new THREE.Scene();
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+                this.controls = null;
+                this.particles = null;
+                this.currentModel = null;
+                this.surfacePoints = [];
+                this.modelMaxSize = 1; 
+                this.particleTexture = this.createParticleTexture();
+
+                this.settings = {
+                    particleCount: 25000,
+                    particleSize: 0.1,
+                    particleColor: '#372CD5',
+                    backgroundColor: '#fff',
+                    cameraFov: 75,
+                    cameraNear: 0.1,
+                    cameraFar: 7000,
+                    cameraMinDistance: 0.1,
+                    cameraMaxDistance: 1000
+                };
+
+                this.init();
+                this.setupEventListeners();
+            }
+
+            init() {
+                // Setup renderer
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setClearColor(new THREE.Color(this.settings.backgroundColor));
+                document.getElementById('canvas-container').appendChild(this.renderer.domElement);
+
+                // Setup camera
+                this.camera.fov = this.settings.cameraFov;
+                this.camera.near = this.settings.cameraNear;
+                this.camera.far = this.settings.cameraFar;
+                this.camera.position.set(5, 5, 5);
+                this.camera.lookAt(0, 0, 0);
+                this.camera.updateProjectionMatrix();
+
+                // Setup orbit controls
+                this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.enableDamping = true;
+                this.controls.dampingFactor = 0.05;
+                this.controls.screenSpacePanning = true; 
+                this.controls.minDistance = this.settings.cameraMinDistance;
+                this.controls.maxDistance = this.settings.cameraMaxDistance;
+                this.controls.update();
+
+                // Setup lighting (minimal for wireframe effect)
+                const ambientLight = new THREE.AmbientLight(0x404040, 0.1);
+                this.scene.add(ambientLight);
+
+                // Start render loop
+                this.animate();
+            }
+
+            setupEventListeners() {
+                // File upload
+                const uploadArea = document.getElementById('upload-area');
+                const fileInput = document.getElementById('file-input');
+
+                uploadArea.addEventListener('click', () => fileInput.click());
+                uploadArea.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    uploadArea.classList.add('dragover');
+                });
+                uploadArea.addEventListener('dragleave', () => {
+                    uploadArea.classList.remove('dragover');
+                });
+                uploadArea.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    uploadArea.classList.remove('dragover');
+                    const files = e.dataTransfer.files;
+                    if (files.length > 0) {
+                        this.loadModel(files[0]);
+                    }
+                });
+
+                fileInput.addEventListener('change', (e) => {
+                    if (e.target.files.length > 0) {
+                        this.loadModel(e.target.files[0]);
+                    }
+                });
+
+                // Controls
+                document.getElementById('particle-density').addEventListener('input', (e) => {
+                    this.settings.particleCount = parseInt(e.target.value);
+                    document.getElementById('particle-count').textContent = this.settings.particleCount.toLocaleString();
+                    this.updateParticles();
+                });
+
+                document.getElementById('particle-size').addEventListener('input', (e) => {
+                    this.settings.particleSize = parseFloat(e.target.value);
+                    document.getElementById('particle-size-value').textContent = this.settings.particleSize;
+                    this.updateParticleSize();
+                });
+
+                document.getElementById('particle-color').addEventListener('input', (e) => {
+                    this.settings.particleColor = e.target.value;
+                    this.updateParticleColor();
+                });
+
+                document.getElementById('background-color').addEventListener('input', (e) => {
+                    this.settings.backgroundColor = e.target.value;
+                    this.renderer.setClearColor(new THREE.Color(this.settings.backgroundColor));
+                });
+                
+                // New camera control event listeners
+                document.getElementById('min-distance-slider').addEventListener('input', (e) => {
+                    this.settings.cameraMinDistance = parseFloat(e.target.value);
+                    document.getElementById('min-distance-value').textContent = this.settings.cameraMinDistance;
+                    this.controls.minDistance = this.settings.cameraMinDistance;
+                    this.controls.update();
+                });
+                document.getElementById('max-distance-slider').addEventListener('input', (e) => {
+                    this.settings.cameraMaxDistance = parseFloat(e.target.value);
+                    document.getElementById('max-distance-value').textContent = this.settings.cameraMaxDistance;
+                    this.controls.maxDistance = this.settings.cameraMaxDistance;
+                    this.controls.update();
+                });
+                document.getElementById('fov-slider').addEventListener('input', (e) => {
+                    this.settings.cameraFov = parseFloat(e.target.value);
+                    document.getElementById('fov-value').textContent = this.settings.cameraFov;
+                    this.camera.fov = this.settings.cameraFov;
+                    this.camera.updateProjectionMatrix();
+                });
+                document.getElementById('near-slider').addEventListener('input', (e) => {
+                    this.settings.cameraNear = parseFloat(e.target.value);
+                    document.getElementById('near-value').textContent = this.settings.cameraNear;
+                    this.camera.near = this.settings.cameraNear;
+                    this.camera.updateProjectionMatrix();
+                });
+                document.getElementById('far-slider').addEventListener('input', (e) => {
+                    this.settings.cameraFar = parseFloat(e.target.value);
+                    document.getElementById('far-value').textContent = this.settings.cameraFar;
+                    this.camera.far = this.settings.cameraFar;
+                    this.camera.updateProjectionMatrix();
+                });
+
+
+                // Color presets
+                document.querySelectorAll('.color-preset').forEach(preset => {
+                    preset.addEventListener('click', (e) => {
+                        const color = e.target.dataset.color;
+                        const parentGroup = e.target.closest('.control-group');
+                        const colorInput = parentGroup.querySelector('input[type="color"]');
+                        
+                        if (colorInput) {
+                            colorInput.value = color;
+                            colorInput.dispatchEvent(new Event('input'));
+                        }
+                    });
+                });
+
+                // Buttons
+                document.getElementById('reset-camera').addEventListener('click', () => {
+                    this.resetCamera();
+                });
+
+                document.getElementById('export-screenshot').addEventListener('click', () => {
+                    this.exportScreenshot();
+                });
+
+                // Window resize
+                window.addEventListener('resize', () => {
+                    this.camera.aspect = window.innerWidth / window.innerHeight;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+            }
+            
+            // New function to create a circular particle texture
+            createParticleTexture() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 64;
+                canvas.height = 64;
+                const context = canvas.getContext('2d');
+                context.beginPath();
+                context.arc(32, 32, 32, 0, 2 * Math.PI, false);
+                context.fillStyle = 'white';
+                context.fill();
+
+                return new THREE.CanvasTexture(canvas);
+            }
+
+            loadModel(file) {
+                const loading = document.getElementById('loading');
+                loading.style.display = 'block';
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const arrayBuffer = e.target.result;
+                    const extension = file.name.split('.').pop().toLowerCase();
+                    
+                    try {
+                        switch (extension) {
+                            case 'glb':
+                            case 'gltf':
+                                this.loadGLTF(arrayBuffer);
+                                break;
+                            case 'obj':
+                                this.loadOBJ(e.target.result);
+                                break;
+                            case 'fbx':
+                                this.loadFBX(arrayBuffer);
+                                break;
+                            default:
+                                throw new Error('Unsupported file format');
+                        }
+                    } catch (error) {
+                        console.error('Error loading model:', error);
+                        // Using a simple modal-like alert instead of the native one
+                        this.showInfoMessage('Error loading model: ' + error.message, true);
+                        loading.style.display = 'none';
+                    }
+                };
+
+                // Read as array buffer for gltf/glb/fbx and as text for obj
+                const extension = file.name.split('.').pop().toLowerCase();
+                if (extension === 'obj') {
+                    reader.readAsText(file);
+                } else {
+                    reader.readAsArrayBuffer(file);
+                }
+            }
+
+            loadGLTF(arrayBuffer) {
+                const loader = new GLTFLoader();
+                loader.parse(arrayBuffer, '', (gltf) => {
+                    this.processModel(gltf.scene);
+                }, (error) => {
+                    console.error('GLTF loading error:', error);
+                    this.showInfoMessage('Error loading GLTF file: ' + error.message, true);
+                    document.getElementById('loading').style.display = 'none';
+                });
+            }
+
+            loadOBJ(text) {
+                try {
+                    const loader = new OBJLoader();
+                    const object = loader.parse(text);
+                    this.processModel(object);
+                } catch (error) {
+                    console.error('OBJ loading error:', error);
+                    this.showInfoMessage('Error loading OBJ file: ' + error.message, true);
+                    document.getElementById('loading').style.display = 'none';
+                }
+            }
+
+            loadFBX(arrayBuffer) {
+                try {
+                    const loader = new FBXLoader();
+                    const object = loader.parse(arrayBuffer);
+                    this.processModel(object);
+                } catch (error) {
+                    console.error('FBX loading error:', error);
+                    this.showInfoMessage('Error loading FBX file: ' + error.message, true);
+                    document.getElementById('loading').style.display = 'none';
+                }
+            }
+
+            processModel(model) {
+                // Clear existing model
+                if (this.currentModel) {
+                    this.scene.remove(this.currentModel);
+                }
+                if (this.particles) {
+                    this.scene.remove(this.particles);
+                }
+
+                this.currentModel = model;
+                
+                // Extract geometry and sample surface points
+                this.surfacePoints = this.extractSurfacePoints(model);
+
+                // Dynamically update particle density slider based on the model's surface points
+                const particleDensitySlider = document.getElementById('particle-density');
+                const particleMaxCountSpan = document.getElementById('particle-max-count');
+                const maxPoints = this.surfacePoints.length;
+
+                particleDensitySlider.max = maxPoints;
+                particleMaxCountSpan.textContent = maxPoints.toLocaleString();
+
+                // Ensure the current particle count is not higher than the new max
+                this.settings.particleCount = Math.min(this.settings.particleCount, maxPoints);
+                particleDensitySlider.value = this.settings.particleCount;
+                document.getElementById('particle-count').textContent = this.settings.particleCount.toLocaleString();
+
+                // Calculate the max size of the new model
+                const box = new THREE.Box3().setFromObject(this.currentModel);
+                const size = box.getSize(new THREE.Vector3());
+                this.modelMaxSize = Math.max(size.x, size.y, size.z);
+                
+                // Create particle system
+                this.createParticleSystem();
+                
+                // Update model info
+                this.updateModelInfo();
+                
+                // Fit camera to model
+                this.fitCameraToModel();
+                
+                document.getElementById('loading').style.display = 'none';
+            }
+
+            extractSurfacePoints(object) {
+                const points = [];
+                
+                object.traverse((child) => {
+                    if (child.isMesh && child.geometry) {
+                        const geometry = child.geometry;
+                        const positions = geometry.attributes.position;
+                        const matrix = child.matrixWorld;
+                        
+                        if (geometry.index) {
+                            // Indexed geometry
+                            const indices = geometry.index.array;
+                            for (let i = 0; i < indices.length; i += 3) {
+                                const a = indices[i];
+                                const b = indices[i + 1];
+                                const c = indices[i + 2];
+                                
+                                // Sample points on triangle face
+                                this.sampleTriangle(positions, a, b, c, matrix, points, 10);
+                            }
+                        } else {
+                            // Non-indexed geometry
+                            for (let i = 0; i < positions.count; i += 3) {
+                                const a = i;
+                                const b = i + 1;
+                                const c = i + 2;
+                                
+                                this.sampleTriangle(positions, a, b, c, matrix, points, 10);
+                            }
+                        }
+                    }
+                });
+                
+                return points;
+            }
+
+            sampleTriangle(positions, a, b, c, matrix, points, samples) {
+                const v1 = new THREE.Vector3().fromBufferAttribute(positions, a);
+                const v2 = new THREE.Vector3().fromBufferAttribute(positions, b);
+                const v3 = new THREE.Vector3().fromBufferAttribute(positions, c);
+                
+                // Transform vertices to world space
+                v1.applyMatrix4(matrix);
+                v2.applyMatrix4(matrix);
+                v3.applyMatrix4(matrix);
+                
+                // Sample points on triangle surface using barycentric coordinates
+                for (let i = 0; i < samples; i++) {
+                    const r1 = Math.random();
+                    const r2 = Math.random();
+                    
+                    const u = 1 - Math.sqrt(r1);
+                    const v = Math.sqrt(r1) * (1 - r2);
+                    const w = Math.sqrt(r1) * r2;
+                    
+                    const point = new THREE.Vector3()
+                        .addScaledVector(v1, u)
+                        .addScaledVector(v2, v)
+                        .addScaledVector(v3, w);
+                    
+                    points.push(point);
+                }
+            }
+
+            createParticleSystem() {
+                if (this.surfacePoints.length === 0) return;
+                
+                // Subsample points based on particle count
+                const step = Math.max(1, Math.floor(this.surfacePoints.length / this.settings.particleCount));
+                const sampledPoints = [];
+                
+                for (let i = 0; i < this.surfacePoints.length; i += step) {
+                    sampledPoints.push(this.surfacePoints[i]);
+                    if (sampledPoints.length >= this.settings.particleCount) break;
+                }
+                
+                // Create geometry
+                const geometry = new THREE.BufferGeometry();
+                const positions = new Float32Array(sampledPoints.length * 3);
+                
+                for (let i = 0; i < sampledPoints.length; i++) {
+                    positions[i * 3] = sampledPoints[i].x;
+                    positions[i * 3 + 1] = sampledPoints[i].y;
+                    positions[i * 3 + 2] = sampledPoints[i].z;
+                }
+                
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                
+                // Calculate relative particle size based on model scale
+                const relativeSize = this.settings.particleSize * (this.modelMaxSize / 100);
+
+                // Create material with the new circular texture
+                const material = new THREE.PointsMaterial({
+                    color: new THREE.Color(this.settings.particleColor),
+                    size: relativeSize,
+                    sizeAttenuation: true, 
+                    transparent: true,
+                    opacity: 0.8,
+                    map: this.particleTexture, // Use the new texture
+                    alphaTest: 0.5 // This ensures the transparent parts of the texture aren't rendered
+                });
+                
+                // Create particles
+                this.particles = new THREE.Points(geometry, material);
+                this.scene.add(this.particles);
+            }
+
+            updateParticles() {
+                if (this.surfacePoints.length > 0) {
+                    if (this.particles) {
+                        this.scene.remove(this.particles);
+                    }
+                    this.createParticleSystem();
+                }
+            }
+
+            updateParticleColor() {
+                if (this.particles) {
+                    this.particles.material.color.set(this.settings.particleColor);
+                }
+            }
+
+            updateParticleSize() {
+                if (this.particles) {
+                    const newSize = this.settings.particleSize * (this.modelMaxSize / 100);
+                    this.particles.material.size = newSize;
+                }
+            }
+
+            updateModelInfo() {
+                const info = document.getElementById('model-info');
+                info.innerHTML = `
+                    <strong>Model Loaded</strong><br>
+                    Model Size: ${(this.modelMaxSize).toFixed(2)} units<br>
+                    Surface Points: ${this.surfacePoints.length.toLocaleString()}<br>
+                    Active Particles: ${Math.min(this.settings.particleCount, this.surfacePoints.length).toLocaleString()}
+                `;
+            }
+
+            fitCameraToModel() {
+                if (!this.currentModel) return;
+                
+                const box = new THREE.Box3().setFromObject(this.currentModel);
+                const size = box.getSize(new THREE.Vector3());
+                const center = box.getCenter(new THREE.Vector3());
+                
+                const maxSize = Math.max(size.x, size.y, size.z);
+                const fitHeightDistance = maxSize / (2 * Math.atan(Math.PI * this.camera.fov / 360));
+                const fitWidthDistance = fitHeightDistance / this.camera.aspect;
+                const distance = 1.2 * Math.max(fitHeightDistance, fitWidthDistance);
+                
+                const direction = this.camera.position.clone().sub(center).normalize().multiplyScalar(distance);
+                this.camera.position.copy(center).add(direction);
+                
+                if (this.controls) {
+                    this.controls.target.copy(center);
+                    this.controls.update();
+                }
+            }
+
+            resetCamera() {
+                this.camera.fov = this.settings.cameraFov;
+                this.camera.near = this.settings.cameraNear;
+                this.camera.far = this.settings.cameraFar;
+                this.camera.position.set(5, 5, 5);
+                this.camera.lookAt(0, 0, 0);
+                this.camera.updateProjectionMatrix();
+
+                if (this.controls) {
+                    this.controls.minDistance = this.settings.cameraMinDistance;
+                    this.controls.maxDistance = this.settings.cameraMaxDistance;
+                    this.controls.target.set(0, 0, 0);
+                    this.controls.update();
+                }
+                
+                if (this.currentModel) {
+                    this.fitCameraToModel();
+                }
+            }
+
+            exportScreenshot() {
+                const link = document.createElement('a');
+                link.download = 'particle-wireframe.png';
+                link.href = this.renderer.domElement.toDataURL('image/png');
+                link.click();
+            }
+
+            // Custom function to display a message instead of native alert()
+            showInfoMessage(message, isError = false) {
+                const loadingDiv = document.getElementById('loading');
+                const pTag = loadingDiv.querySelector('p');
+                pTag.textContent = message;
+                loadingDiv.style.display = 'block';
+                if (isError) {
+                    loadingDiv.style.backgroundColor = 'rgba(255, 0, 0, 0.9)';
+                    setTimeout(() => {
+                        loadingDiv.style.display = 'none';
+                        loadingDiv.style.backgroundColor = 'rgba(0, 0, 0, 0.9)';
+                        pTag.textContent = 'Processing 3D model...';
+                    }, 5000);
+                } else {
+                    setTimeout(() => {
+                        loadingDiv.style.display = 'none';
+                        pTag.textContent = 'Processing 3D model...';
+                    }, 2000);
+                }
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                
+                if (this.controls) {
+                    this.controls.update();
+                }
+                
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+        
+        // Wait for the window to load before initializing the app
+        window.onload = function() {
+            new ParticleWireframeViewer();
+        }
+    </script>
+</body>
+</html>
