@@ -539,6 +539,11 @@
                     this.scene.remove(this.particles);
                 }
 
+                // Center the new model at the scene origin (0,0,0)
+                const box = new THREE.Box3().setFromObject(model);
+                const center = box.getCenter(new THREE.Vector3());
+                model.position.sub(center);
+
                 this.currentModel = model;
                 
                 // Extract geometry and sample surface points
@@ -558,7 +563,6 @@
                 document.getElementById('particle-count').textContent = this.settings.particleCount.toLocaleString();
 
                 // Calculate the max size of the new model
-                const box = new THREE.Box3().setFromObject(this.currentModel);
                 const size = box.getSize(new THREE.Vector3());
                 this.modelMaxSize = Math.max(size.x, size.y, size.z);
                 
@@ -568,8 +572,8 @@
                 // Update model info
                 this.updateModelInfo();
                 
-                // Fit camera to model
-                this.fitCameraToModel();
+                // Reset the camera and fit to the new model
+                this.resetCamera();
                 
                 document.getElementById('loading').style.display = 'none';
             }
@@ -718,18 +722,16 @@
                 
                 const box = new THREE.Box3().setFromObject(this.currentModel);
                 const size = box.getSize(new THREE.Vector3());
-                const center = box.getCenter(new THREE.Vector3());
                 
                 const maxSize = Math.max(size.x, size.y, size.z);
                 const fitHeightDistance = maxSize / (2 * Math.atan(Math.PI * this.camera.fov / 360));
                 const fitWidthDistance = fitHeightDistance / this.camera.aspect;
                 const distance = 1.2 * Math.max(fitHeightDistance, fitWidthDistance);
                 
-                const direction = this.camera.position.clone().sub(center).normalize().multiplyScalar(distance);
-                this.camera.position.copy(center).add(direction);
+                const direction = this.camera.position.clone().sub(this.controls.target).normalize().multiplyScalar(distance);
+                this.camera.position.copy(this.controls.target).add(direction);
                 
                 if (this.controls) {
-                    this.controls.target.copy(center);
                     this.controls.update();
                 }
             }
