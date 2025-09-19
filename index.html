@@ -1,9 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Particle Wireframe 3D Viewer</title>
+    <script type="module">
+        import { GLTFExporter } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/exporters/GLTFExporter.js';
+        window.THREE = window.THREE || {};
+        window.THREE.GLTFExporter = GLTFExporter;
+    </script>
     <style>
         * {
             margin: 0;
@@ -168,13 +174,14 @@
         }
     </style>
 </head>
+
 <body>
     <div id="container">
         <div id="canvas-container"></div>
-        
+
         <div id="controls">
             <h2>Particle Wireframe Viewer</h2>
-            
+
             <div id="upload-area">
                 <p>📁 Drag & Drop 3D Model</p>
                 <p>or click to browse</p>
@@ -183,7 +190,8 @@
             </div>
 
             <div class="control-group">
-                <label>Particle Count: <span id="particle-count">5000</span> / <span id="particle-max-count">50000</span></label>
+                <label>Particle Count: <span id="particle-count">5000</span> / <span
+                        id="particle-max-count">50000</span></label>
                 <input type="range" id="particle-density" min="1000" max="50000" value="5000" step="500">
                 <div class="info-text">Higher values may impact performance</div>
             </div>
@@ -220,7 +228,7 @@
             <!-- New Camera Controls -->
             <div class="control-group">
                 <h3>Camera Controls</h3>
-                
+
                 <label>Zoom In Limit (minDistance): <span id="min-distance-value">0.1</span></label>
                 <input type="range" id="min-distance-slider" min="0.01" max="10" value="0.1" step="0.01">
 
@@ -242,7 +250,8 @@
                 <button class="button" id="reset-camera">Reset Camera</button>
                 <button class="button" id="center-object">Center Object</button>
                 <button class="button" id="export-screenshot">Export Screenshot</button>
-                <button class="button" id="export-point-cloud">Export Point Cloud</button>
+                <button class="button" id="export-point-cloud">Export Point Cloud (JSON)</button>
+                <button class="button" id="export-glb">Export Point Cloud (GLB)</button>
             </div>
 
             <div id="model-info"></div>
@@ -277,7 +286,7 @@
                 this.particles = null;
                 this.currentModel = null;
                 this.surfaceTriangles = []; // Changed from surfacePoints
-                this.modelMaxSize = 1; 
+                this.modelMaxSize = 1;
                 this.particleTexture = this.createParticleTexture();
 
                 this.settings = {
@@ -314,7 +323,7 @@
                 this.controls = new OrbitControls(this.camera, this.renderer.domElement);
                 this.controls.enableDamping = true;
                 this.controls.dampingFactor = 0.05;
-                this.controls.screenSpacePanning = true; 
+                this.controls.screenSpacePanning = true;
                 this.controls.minDistance = this.settings.cameraMinDistance;
                 this.controls.maxDistance = this.settings.cameraMaxDistance;
                 this.controls.update();
@@ -377,7 +386,7 @@
                     this.settings.backgroundColor = e.target.value;
                     this.renderer.setClearColor(new THREE.Color(this.settings.backgroundColor));
                 });
-                
+
                 // New camera control event listeners
                 document.getElementById('min-distance-slider').addEventListener('input', (e) => {
                     this.settings.cameraMinDistance = parseFloat(e.target.value);
@@ -417,7 +426,7 @@
                         const color = e.target.dataset.color;
                         const parentGroup = e.target.closest('.control-group');
                         const colorInput = parentGroup.querySelector('input[type="color"]');
-                        
+
                         if (colorInput) {
                             colorInput.value = color;
                             colorInput.dispatchEvent(new Event('input'));
@@ -442,6 +451,10 @@
                     this.exportPointCloud();
                 });
 
+                document.getElementById('export-glb').addEventListener('click', () => {
+                    this.exportGLB();
+                });
+
                 // Window resize
                 window.addEventListener('resize', () => {
                     this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -449,7 +462,7 @@
                     this.renderer.setSize(window.innerWidth, window.innerHeight);
                 });
             }
-            
+
             // New function to create a circular particle texture
             createParticleTexture() {
                 const canvas = document.createElement('canvas');
@@ -472,7 +485,7 @@
                 reader.onload = (e) => {
                     const arrayBuffer = e.target.result;
                     const extension = file.name.split('.').pop().toLowerCase();
-                    
+
                     try {
                         switch (extension) {
                             case 'glb':
@@ -555,7 +568,7 @@
                 model.position.sub(center);
 
                 this.currentModel = model;
-                
+
                 // Extract geometry and sample surface points (back to original method)
                 this.surfacePoints = this.extractSurfacePoints(model);
 
@@ -575,29 +588,29 @@
                 // Calculate the max size of the new model
                 const size = box.getSize(new THREE.Vector3());
                 this.modelMaxSize = Math.max(size.x, size.y, size.z);
-                
+
                 // Create particle system
                 this.createParticleSystem();
-                
+
                 // Update model info
                 this.updateModelInfo();
-                
+
                 // Reset the camera and fit to the new model
                 this.resetCamera();
-                
+
                 document.getElementById('loading').style.display = 'none';
             }
 
             // BACK TO ORIGINAL: Extract surface points with better sampling
             extractSurfacePoints(object) {
                 const points = [];
-                
+
                 object.traverse((child) => {
                     if (child.isMesh && child.geometry) {
                         const geometry = child.geometry;
                         const positions = geometry.attributes.position;
                         const matrix = child.matrixWorld;
-                        
+
                         if (geometry.index) {
                             // Indexed geometry
                             const indices = geometry.index.array;
@@ -605,7 +618,7 @@
                                 const a = indices[i];
                                 const b = indices[i + 1];
                                 const c = indices[i + 2];
-                                
+
                                 // Increased samples per triangle for better coverage
                                 this.sampleTriangle(positions, a, b, c, matrix, points, 15);
                             }
@@ -615,13 +628,13 @@
                                 const a = i;
                                 const b = i + 1;
                                 const c = i + 2;
-                                
+
                                 this.sampleTriangle(positions, a, b, c, matrix, points, 15);
                             }
                         }
                     }
                 });
-                
+
                 return points;
             }
 
@@ -629,26 +642,26 @@
                 const v1 = new THREE.Vector3().fromBufferAttribute(positions, a);
                 const v2 = new THREE.Vector3().fromBufferAttribute(positions, b);
                 const v3 = new THREE.Vector3().fromBufferAttribute(positions, c);
-                
+
                 // Transform vertices to world space
                 v1.applyMatrix4(matrix);
                 v2.applyMatrix4(matrix);
                 v3.applyMatrix4(matrix);
-                
+
                 // Sample points on triangle surface using barycentric coordinates
                 for (let i = 0; i < samples; i++) {
                     const r1 = Math.random();
                     const r2 = Math.random();
-                    
+
                     const u = 1 - Math.sqrt(r1);
                     const v = Math.sqrt(r1) * (1 - r2);
                     const w = Math.sqrt(r1) * r2;
-                    
+
                     const point = new THREE.Vector3()
                         .addScaledVector(v1, u)
                         .addScaledVector(v2, v)
                         .addScaledVector(v3, w);
-                    
+
                     points.push(point);
                 }
             }
@@ -656,43 +669,43 @@
             // IMPROVED: Better sampling with shuffled selection
             createParticleSystem() {
                 if (this.surfacePoints.length === 0) return;
-                
+
                 // Create shuffled indices to ensure better distribution
-                const indices = Array.from({length: this.surfacePoints.length}, (_, i) => i);
-                
+                const indices = Array.from({ length: this.surfacePoints.length }, (_, i) => i);
+
                 // Fisher-Yates shuffle for random but complete coverage
                 for (let i = indices.length - 1; i > 0; i--) {
                     const j = Math.floor(Math.random() * (i + 1));
                     [indices[i], indices[j]] = [indices[j], indices[i]];
                 }
-                
+
                 // Select points using shuffled indices for better distribution
                 const selectedPoints = [];
                 const step = Math.max(1, Math.floor(this.surfacePoints.length / this.settings.particleCount));
-                
+
                 // Take every 'step' points from shuffled array, plus some random extras
                 for (let i = 0; i < indices.length && selectedPoints.length < this.settings.particleCount; i += step) {
                     selectedPoints.push(this.surfacePoints[indices[i]]);
                 }
-                
+
                 // If we still need more points, fill randomly from remaining
                 while (selectedPoints.length < this.settings.particleCount && selectedPoints.length < this.surfacePoints.length) {
                     const randomIndex = Math.floor(Math.random() * this.surfacePoints.length);
                     selectedPoints.push(this.surfacePoints[randomIndex]);
                 }
-                
+
                 // Create geometry
                 const geometry = new THREE.BufferGeometry();
                 const positions = new Float32Array(selectedPoints.length * 3);
-                
+
                 for (let i = 0; i < selectedPoints.length; i++) {
                     positions[i * 3] = selectedPoints[i].x;
                     positions[i * 3 + 1] = selectedPoints[i].y;
                     positions[i * 3 + 2] = selectedPoints[i].z;
                 }
-                
+
                 geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-                
+
                 // Calculate relative particle size based on model scale
                 const relativeSize = this.settings.particleSize * (this.modelMaxSize / 100);
 
@@ -700,13 +713,13 @@
                 const material = new THREE.PointsMaterial({
                     color: new THREE.Color(this.settings.particleColor),
                     size: relativeSize,
-                    sizeAttenuation: true, 
+                    sizeAttenuation: true,
                     transparent: true,
                     opacity: 0.8,
                     map: this.particleTexture,
                     alphaTest: 0.5
                 });
-                
+
                 // Create particles
                 this.particles = new THREE.Points(geometry, material);
                 this.scene.add(this.particles);
@@ -746,18 +759,18 @@
 
             fitCameraToModel() {
                 if (!this.currentModel) return;
-                
+
                 const box = new THREE.Box3().setFromObject(this.currentModel);
                 const size = box.getSize(new THREE.Vector3());
-                
+
                 const maxSize = Math.max(size.x, size.y, size.z);
                 const fitHeightDistance = maxSize / (2 * Math.atan(Math.PI * this.camera.fov / 360));
                 const fitWidthDistance = fitHeightDistance / this.camera.aspect;
                 const distance = 1.2 * Math.max(fitHeightDistance, fitWidthDistance);
-                
+
                 const direction = this.camera.position.clone().sub(this.controls.target).normalize().multiplyScalar(distance);
                 this.camera.position.copy(this.controls.target).add(direction);
-                
+
                 if (this.controls) {
                     this.controls.update();
                 }
@@ -765,26 +778,26 @@
 
             centerObject() {
                 if (!this.controls) return;
-                
+
                 // Get current camera position relative to current target
                 const currentDistance = this.controls.target.distanceTo(this.camera.position);
                 const currentDirection = this.camera.position.clone().sub(this.controls.target).normalize();
-                
+
                 // Set target back to origin (0, 0, 0)
                 this.controls.target.set(0, 0, 0);
-                
+
                 // Reposition camera to maintain same distance and angle, but now relative to origin
                 const newCameraPosition = new THREE.Vector3()
                     .copy(currentDirection)
                     .multiplyScalar(currentDistance)
                     .add(this.controls.target);
-                
+
                 this.camera.position.copy(newCameraPosition);
                 this.camera.lookAt(this.controls.target);
-                
+
                 // Update controls
                 this.controls.update();
-                
+
                 console.log('Object centered - camera distance and angle preserved');
             }
 
@@ -802,7 +815,7 @@
                     this.controls.target.set(0, 0, 0);
                     this.controls.update();
                 }
-                
+
                 if (this.currentModel) {
                     this.fitCameraToModel();
                 }
@@ -831,12 +844,12 @@
                 // Capture current camera state
                 const cameraDistance = this.controls.target.distanceTo(this.camera.position);
                 const cameraTarget = this.controls.target.clone();
-                
+
                 // Calculate spherical coordinates for the camera position relative to target
                 const cameraDirection = this.camera.position.clone().sub(cameraTarget).normalize();
                 const spherical = new THREE.Spherical();
                 spherical.setFromVector3(cameraDirection);
-                
+
                 // Quantization settings - adjust precision as needed
                 const precision = 1000; // 3 decimal places (0.001 unit precision)
                 const quantizedCloud = [];
@@ -880,14 +893,14 @@
 
                 // Convert to JSON string
                 const jsonString = JSON.stringify(exportData);
-                
+
                 // Calculate file sizes for user info
                 const originalSize = positions.length * 4; // Float32 = 4 bytes each
                 const jsonSize = new Blob([jsonString]).size;
                 const compressionRatio = ((originalSize - jsonSize) / originalSize * 100).toFixed(1);
 
                 // Create and download file
-                const dataBlob = new Blob([jsonString], {type: 'application/json'});
+                const dataBlob = new Blob([jsonString], { type: 'application/json' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(dataBlob);
                 link.download = `particle-cloud-${particleCount}pts.json`;
@@ -897,10 +910,112 @@
                 setTimeout(() => {
                     this.showInfoMessage(
                         `Point cloud exported! ${particleCount.toLocaleString()} particles, ` +
-                        `${(jsonSize / 1024 / 1024).toFixed(2)}MB (${compressionRatio}% compression)`, 
+                        `${(jsonSize / 1024 / 1024).toFixed(2)}MB (${compressionRatio}% compression)`,
                         false
                     );
                 }, 100);
+            }
+
+            exportGLB() {
+                if (!this.particles) {
+                    this.showInfoMessage('No particle system loaded to export!', true);
+                    return;
+                }
+
+                // Check if GLTFExporter is available
+                if (typeof window.THREE.GLTFExporter === 'undefined') {
+                    this.showInfoMessage(
+                        'GLB export requires GLTFExporter. Please add GLTFExporter script to enable this feature.',
+                        true
+                    );
+                    return;
+                }
+
+                // Show loading message
+                this.showInfoMessage('Preparing GLB export...', false);
+
+                // Capture current camera state (same as JSON export)
+                const cameraDistance = this.controls.target.distanceTo(this.camera.position);
+                const cameraTarget = this.controls.target.clone();
+                const cameraDirection = this.camera.position.clone().sub(cameraTarget).normalize();
+                const spherical = new THREE.Spherical();
+                spherical.setFromVector3(cameraDirection);
+
+                // Create a scene specifically for export
+                const exportScene = new THREE.Scene();
+
+                // Clone the particle system for export
+                const exportGeometry = this.particles.geometry.clone();
+                const exportMaterial = this.particles.material.clone();
+                const exportParticles = new THREE.Points(exportGeometry, exportMaterial);
+
+                // Add metadata as userData (GLB supports custom data)
+                exportParticles.userData = {
+                    particleViewer: {
+                        version: "1.1",
+                        particleCount: this.particles.geometry.attributes.position.count,
+                        originalModelSize: this.modelMaxSize,
+                        exportDate: new Date().toISOString(),
+                        camera: {
+                            distance: cameraDistance,
+                            target: {
+                                x: cameraTarget.x,
+                                y: cameraTarget.y,
+                                z: cameraTarget.z
+                            },
+                            spherical: {
+                                radius: spherical.radius,
+                                phi: spherical.phi,
+                                theta: spherical.theta
+                            },
+                            fov: this.camera.fov,
+                            near: this.camera.near,
+                            far: this.camera.far
+                        },
+                        particleSettings: {
+                            color: this.settings.particleColor,
+                            size: this.settings.particleSize
+                        }
+                    }
+                };
+
+                exportScene.add(exportParticles);
+
+                // Configure GLTFExporter
+                const exporter = new window.THREE.GLTFExporter();
+                const options = {
+                    binary: true, // Export as GLB (binary format)
+                    includeCustomExtensions: true,
+                    maxTextureSize: 4096
+                };
+
+                // Export to GLB
+                exporter.parse(
+                    exportScene,
+                    (gltfData) => {
+                        // gltfData is an ArrayBuffer for GLB format
+                        const blob = new Blob([gltfData], { type: 'model/gltf-binary' });
+                        const link = document.createElement('a');
+                        link.href = URL.createObjectURL(blob);
+                        link.download = `particle-cloud-${exportParticles.userData.particleViewer.particleCount}pts.glb`;
+                        link.click();
+
+                        // Show success message with file size
+                        const fileSizeMB = (blob.size / 1024 / 1024).toFixed(2);
+                        setTimeout(() => {
+                            this.showInfoMessage(
+                                `GLB exported! ${exportParticles.userData.particleViewer.particleCount.toLocaleString()} particles, ` +
+                                `${fileSizeMB}MB - optimized for fast loading!`,
+                                false
+                            );
+                        }, 100);
+                    },
+                    (error) => {
+                        console.error('GLB export error:', error);
+                        this.showInfoMessage('Error during GLB export: ' + error.message, true);
+                    },
+                    options
+                );
             }
 
             // Helper function to load point cloud back into Three.js (for reference)
@@ -908,18 +1023,18 @@
                 const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
                 const particles = data.particles;
                 const quantizationFactor = data.metadata.quantizationFactor;
-                
+
                 const positions = new Float32Array(particles.length * 3);
-                
+
                 particles.forEach((point, i) => {
                     positions[i * 3] = point[0] / quantizationFactor;
                     positions[i * 3 + 1] = point[1] / quantizationFactor;
                     positions[i * 3 + 2] = point[2] / quantizationFactor;
                 });
-                
+
                 const geometry = new THREE.BufferGeometry();
                 geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-                
+
                 // Use your existing material settings
                 const material = new THREE.PointsMaterial({
                     color: new THREE.Color(this.settings.particleColor),
@@ -930,7 +1045,7 @@
                     map: this.particleTexture,
                     alphaTest: 0.5
                 });
-                
+
                 return new THREE.Points(geometry, material);
             }
 
@@ -957,19 +1072,20 @@
 
             animate() {
                 requestAnimationFrame(() => this.animate());
-                
+
                 if (this.controls) {
                     this.controls.update();
                 }
-                
+
                 this.renderer.render(this.scene, this.camera);
             }
         }
-        
+
         // Wait for the window to load before initializing the app
-        window.onload = function() {
+        window.onload = function () {
             new ParticleWireframeViewer();
         }
     </script>
 </body>
+
 </html>
