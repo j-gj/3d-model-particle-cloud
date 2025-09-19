@@ -984,9 +984,16 @@
                 // Configure GLTFExporter
                 const exporter = new window.THREE.GLTFExporter();
                 const options = {
-                    binary: true, // Export as GLB (binary format)
+                    binary: true,
                     includeCustomExtensions: true,
-                    maxTextureSize: 4096
+                    maxTextureSize: 4096,
+                    // Add these for Meshopt compression
+                    meshOptimization: true,
+                    quantization: {
+                        position: 14,  // 14-bit precision for positions
+                        normal: 8,     // 8-bit for normals
+                        texcoord: 12   // 12-bit for texture coordinates
+                    }
                 };
 
                 // Export to GLB
