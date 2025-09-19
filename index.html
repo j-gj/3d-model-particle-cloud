@@ -240,7 +240,9 @@
 
             <div class="control-group">
                 <button class="button" id="reset-camera">Reset Camera</button>
+                <button class="button" id="center-object">Center Object</button>
                 <button class="button" id="export-screenshot">Export Screenshot</button>
+                <button class="button" id="export-point-cloud">Export Point Cloud</button>
             </div>
 
             <div id="model-info"></div>
@@ -274,7 +276,7 @@
                 this.controls = null;
                 this.particles = null;
                 this.currentModel = null;
-                this.surfacePoints = [];
+                this.surfaceTriangles = []; // Changed from surfacePoints
                 this.modelMaxSize = 1; 
                 this.particleTexture = this.createParticleTexture();
 
@@ -428,8 +430,16 @@
                     this.resetCamera();
                 });
 
+                document.getElementById('center-object').addEventListener('click', () => {
+                    this.centerObject();
+                });
+
                 document.getElementById('export-screenshot').addEventListener('click', () => {
                     this.exportScreenshot();
+                });
+
+                document.getElementById('export-point-cloud').addEventListener('click', () => {
+                    this.exportPointCloud();
                 });
 
                 // Window resize
@@ -546,7 +556,7 @@
 
                 this.currentModel = model;
                 
-                // Extract geometry and sample surface points
+                // Extract geometry and sample surface points (back to original method)
                 this.surfacePoints = this.extractSurfacePoints(model);
 
                 // Dynamically update particle density slider based on the model's surface points
@@ -578,6 +588,7 @@
                 document.getElementById('loading').style.display = 'none';
             }
 
+            // BACK TO ORIGINAL: Extract surface points with better sampling
             extractSurfacePoints(object) {
                 const points = [];
                 
@@ -595,8 +606,8 @@
                                 const b = indices[i + 1];
                                 const c = indices[i + 2];
                                 
-                                // Sample points on triangle face
-                                this.sampleTriangle(positions, a, b, c, matrix, points, 10);
+                                // Increased samples per triangle for better coverage
+                                this.sampleTriangle(positions, a, b, c, matrix, points, 15);
                             }
                         } else {
                             // Non-indexed geometry
@@ -605,7 +616,7 @@
                                 const b = i + 1;
                                 const c = i + 2;
                                 
-                                this.sampleTriangle(positions, a, b, c, matrix, points, 10);
+                                this.sampleTriangle(positions, a, b, c, matrix, points, 15);
                             }
                         }
                     }
@@ -642,26 +653,42 @@
                 }
             }
 
+            // IMPROVED: Better sampling with shuffled selection
             createParticleSystem() {
                 if (this.surfacePoints.length === 0) return;
                 
-                // Subsample points based on particle count
-                const step = Math.max(1, Math.floor(this.surfacePoints.length / this.settings.particleCount));
-                const sampledPoints = [];
+                // Create shuffled indices to ensure better distribution
+                const indices = Array.from({length: this.surfacePoints.length}, (_, i) => i);
                 
-                for (let i = 0; i < this.surfacePoints.length; i += step) {
-                    sampledPoints.push(this.surfacePoints[i]);
-                    if (sampledPoints.length >= this.settings.particleCount) break;
+                // Fisher-Yates shuffle for random but complete coverage
+                for (let i = indices.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [indices[i], indices[j]] = [indices[j], indices[i]];
+                }
+                
+                // Select points using shuffled indices for better distribution
+                const selectedPoints = [];
+                const step = Math.max(1, Math.floor(this.surfacePoints.length / this.settings.particleCount));
+                
+                // Take every 'step' points from shuffled array, plus some random extras
+                for (let i = 0; i < indices.length && selectedPoints.length < this.settings.particleCount; i += step) {
+                    selectedPoints.push(this.surfacePoints[indices[i]]);
+                }
+                
+                // If we still need more points, fill randomly from remaining
+                while (selectedPoints.length < this.settings.particleCount && selectedPoints.length < this.surfacePoints.length) {
+                    const randomIndex = Math.floor(Math.random() * this.surfacePoints.length);
+                    selectedPoints.push(this.surfacePoints[randomIndex]);
                 }
                 
                 // Create geometry
                 const geometry = new THREE.BufferGeometry();
-                const positions = new Float32Array(sampledPoints.length * 3);
+                const positions = new Float32Array(selectedPoints.length * 3);
                 
-                for (let i = 0; i < sampledPoints.length; i++) {
-                    positions[i * 3] = sampledPoints[i].x;
-                    positions[i * 3 + 1] = sampledPoints[i].y;
-                    positions[i * 3 + 2] = sampledPoints[i].z;
+                for (let i = 0; i < selectedPoints.length; i++) {
+                    positions[i * 3] = selectedPoints[i].x;
+                    positions[i * 3 + 1] = selectedPoints[i].y;
+                    positions[i * 3 + 2] = selectedPoints[i].z;
                 }
                 
                 geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -669,15 +696,15 @@
                 // Calculate relative particle size based on model scale
                 const relativeSize = this.settings.particleSize * (this.modelMaxSize / 100);
 
-                // Create material with the new circular texture
+                // Create material with the circular texture
                 const material = new THREE.PointsMaterial({
                     color: new THREE.Color(this.settings.particleColor),
                     size: relativeSize,
                     sizeAttenuation: true, 
                     transparent: true,
                     opacity: 0.8,
-                    map: this.particleTexture, // Use the new texture
-                    alphaTest: 0.5 // This ensures the transparent parts of the texture aren't rendered
+                    map: this.particleTexture,
+                    alphaTest: 0.5
                 });
                 
                 // Create particles
@@ -736,6 +763,31 @@
                 }
             }
 
+            centerObject() {
+                if (!this.controls) return;
+                
+                // Get current camera position relative to current target
+                const currentDistance = this.controls.target.distanceTo(this.camera.position);
+                const currentDirection = this.camera.position.clone().sub(this.controls.target).normalize();
+                
+                // Set target back to origin (0, 0, 0)
+                this.controls.target.set(0, 0, 0);
+                
+                // Reposition camera to maintain same distance and angle, but now relative to origin
+                const newCameraPosition = new THREE.Vector3()
+                    .copy(currentDirection)
+                    .multiplyScalar(currentDistance)
+                    .add(this.controls.target);
+                
+                this.camera.position.copy(newCameraPosition);
+                this.camera.lookAt(this.controls.target);
+                
+                // Update controls
+                this.controls.update();
+                
+                console.log('Object centered - camera distance and angle preserved');
+            }
+
             resetCamera() {
                 this.camera.fov = this.settings.cameraFov;
                 this.camera.near = this.settings.cameraNear;
@@ -761,6 +813,125 @@
                 link.download = 'particle-wireframe.png';
                 link.href = this.renderer.domElement.toDataURL('image/png');
                 link.click();
+            }
+
+            exportPointCloud() {
+                if (!this.particles) {
+                    this.showInfoMessage('No particle system loaded to export!', true);
+                    return;
+                }
+
+                // Show loading message
+                this.showInfoMessage('Preparing point cloud export...', false);
+
+                // Get particle positions
+                const positions = this.particles.geometry.attributes.position.array;
+                const particleCount = positions.length / 3;
+
+                // Capture current camera state
+                const cameraDistance = this.controls.target.distanceTo(this.camera.position);
+                const cameraTarget = this.controls.target.clone();
+                
+                // Calculate spherical coordinates for the camera position relative to target
+                const cameraDirection = this.camera.position.clone().sub(cameraTarget).normalize();
+                const spherical = new THREE.Spherical();
+                spherical.setFromVector3(cameraDirection);
+                
+                // Quantization settings - adjust precision as needed
+                const precision = 1000; // 3 decimal places (0.001 unit precision)
+                const quantizedCloud = [];
+
+                // Convert to quantized coordinates
+                for (let i = 0; i < positions.length; i += 3) {
+                    const x = Math.round(positions[i] * precision);
+                    const y = Math.round(positions[i + 1] * precision);
+                    const z = Math.round(positions[i + 2] * precision);
+                    quantizedCloud.push([x, y, z]);
+                }
+
+                // Create metadata with camera information
+                const exportData = {
+                    metadata: {
+                        version: "1.1",
+                        particleCount: particleCount,
+                        quantizationFactor: precision,
+                        originalModelSize: this.modelMaxSize,
+                        exportDate: new Date().toISOString(),
+                        camera: {
+                            distance: cameraDistance,
+                            target: {
+                                x: cameraTarget.x,
+                                y: cameraTarget.y,
+                                z: cameraTarget.z
+                            },
+                            spherical: {
+                                radius: spherical.radius,
+                                phi: spherical.phi,      // vertical angle
+                                theta: spherical.theta   // horizontal angle (rotation)
+                            },
+                            fov: this.camera.fov,
+                            near: this.camera.near,
+                            far: this.camera.far
+                        },
+                        note: "Divide coordinates by quantizationFactor to get original values"
+                    },
+                    particles: quantizedCloud
+                };
+
+                // Convert to JSON string
+                const jsonString = JSON.stringify(exportData);
+                
+                // Calculate file sizes for user info
+                const originalSize = positions.length * 4; // Float32 = 4 bytes each
+                const jsonSize = new Blob([jsonString]).size;
+                const compressionRatio = ((originalSize - jsonSize) / originalSize * 100).toFixed(1);
+
+                // Create and download file
+                const dataBlob = new Blob([jsonString], {type: 'application/json'});
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(dataBlob);
+                link.download = `particle-cloud-${particleCount}pts.json`;
+                link.click();
+
+                // Show success message with stats
+                setTimeout(() => {
+                    this.showInfoMessage(
+                        `Point cloud exported! ${particleCount.toLocaleString()} particles, ` +
+                        `${(jsonSize / 1024 / 1024).toFixed(2)}MB (${compressionRatio}% compression)`, 
+                        false
+                    );
+                }, 100);
+            }
+
+            // Helper function to load point cloud back into Three.js (for reference)
+            loadPointCloudFromJSON(jsonData) {
+                const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+                const particles = data.particles;
+                const quantizationFactor = data.metadata.quantizationFactor;
+                
+                const positions = new Float32Array(particles.length * 3);
+                
+                particles.forEach((point, i) => {
+                    positions[i * 3] = point[0] / quantizationFactor;
+                    positions[i * 3 + 1] = point[1] / quantizationFactor;
+                    positions[i * 3 + 2] = point[2] / quantizationFactor;
+                });
+                
+                const geometry = new THREE.BufferGeometry();
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                
+                // Use your existing material settings
+                const material = new THREE.PointsMaterial({
+                    color: new THREE.Color(this.settings.particleColor),
+                    size: this.settings.particleSize * (data.metadata.originalModelSize / 100),
+                    sizeAttenuation: true,
+                    transparent: true,
+                    opacity: 0.8,
+                    map: this.particleTexture,
+                    alphaTest: 0.5
+                });
+                
+                return new THREE.Points(geometry, material);
             }
 
             // Custom function to display a message instead of native alert()
